@@ -1,0 +1,1610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nuclear Reactor Simulator — VVER-1200</title>
+<style>
+  :root {
+    --green: #00ff88;
+    --cyan: #00d4ff;
+    --orange: #ff6b00;
+    --red: #ff2244;
+    --yellow: #ffdd00;
+    --blue: #0066ff;
+    --dark: #050a0f;
+    --panel: #0a1520;
+    --border: #1a3a5a;
+    --text: #8ab4c8;
+    --bright: #c8e8ff;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--dark);
+    color: var(--text);
+    font-family: 'Courier New', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  header {
+    background: var(--panel);
+    border-bottom: 2px solid var(--border);
+    padding: 12px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .plant-id {
+    color: var(--green);
+    font-size: 18px;
+    font-weight: bold;
+    letter-spacing: 3px;
+  }
+
+  .header-right {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+  }
+
+  .status-led {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+  }
+
+  .led {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  .led.red { background: var(--red); box-shadow: 0 0 8px var(--red); }
+  .led.yellow { background: var(--yellow); box-shadow: 0 0 8px var(--yellow); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .datetime {
+    color: var(--cyan);
+    font-size: 12px;
+  }
+
+  .main-grid {
+    display: grid;
+    grid-template-columns: 280px 1fr 280px;
+    grid-template-rows: auto 1fr auto;
+    height: calc(100vh - 60px);
+    gap: 0;
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 16px;
+  }
+
+  .panel-title {
+    color: var(--cyan);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+  }
+
+  .left-panel {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    overflow-y: auto;
+  }
+
+  .right-panel {
+    grid-column: 3;
+    grid-row: 1 / 3;
+    overflow-y: auto;
+  }
+
+  .center-top {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 12px;
+    background: var(--dark);
+    border-bottom: 1px solid var(--border);
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+
+  .reactor-area {
+    grid-column: 2;
+    grid-row: 2;
+    background: var(--dark);
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    justify-content: center; 
+    align-items: center;
+  }
+
+  .bottom-bar {
+    grid-column: 1 / 4;
+    grid-row: 3;
+    background: var(--panel);
+    border-top: 2px solid var(--border);
+    padding: 10px 24px;
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    overflow-x: auto;
+  }
+
+  .gauge-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+
+  .gauge {
+    flex: 1;
+    min-width: 70px;
+    background: #060e18;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px;
+    text-align: center;
+  }
+
+  .gauge-label {
+    font-size: 9px;
+    color: var(--text);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .gauge-value {
+    font-size: 20px;
+    font-weight: bold;
+    color: var(--green);
+    line-height: 1;
+  }
+
+  .gauge-value.warn { color: var(--yellow); }
+  .gauge-value.crit { color: var(--red); }
+
+  .gauge-unit {
+    font-size: 9px;
+    color: var(--text);
+    margin-top: 2px;
+  }
+
+  .bar-gauge {
+    margin-bottom: 10px;
+  }
+
+  .bar-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    margin-bottom: 3px;
+    color: var(--bright);
+  }
+
+  .bar-track {
+    height: 8px;
+    background: #060e18;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    background: var(--green);
+    transition: width 0.5s ease;
+    box-shadow: 0 0 6px currentColor;
+  }
+
+  .bar-fill.warn { background: var(--yellow); }
+  .bar-fill.crit { background: var(--red); }
+
+  .control-group {
+    margin-bottom: 16px;
+  }
+
+  .control-label {
+    font-size: 10px;
+    color: var(--cyan);
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  input[type=range] {
+    flex: 1;
+    -webkit-appearance: none;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+  }
+
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--cyan);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 6px var(--cyan);
+  }
+
+  .slider-val {
+    font-size: 11px;
+    color: var(--green);
+    min-width: 36px;
+    text-align: right;
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 6px 14px;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border: 1px solid;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: transparent;
+  }
+
+  .btn-green {
+    border-color: var(--green);
+    color: var(--green);
+  }
+  .btn-green:hover { background: var(--green); color: #000; box-shadow: 0 0 10px var(--green); }
+
+  .btn-red {
+    border-color: var(--red);
+    color: var(--red);
+  }
+  .btn-red:hover { background: var(--red); color: #fff; box-shadow: 0 0 10px var(--red); }
+
+  .btn-yellow {
+    border-color: var(--yellow);
+    color: var(--yellow);
+  }
+  .btn-yellow:hover { background: var(--yellow); color: #000; }
+
+  .btn-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+
+  .log-area {
+    height: 120px;
+    overflow-y: auto;
+    font-size: 10px;
+    line-height: 1.6;
+    border: 1px solid var(--border);
+    padding: 6px 8px;
+    background: #020810;
+  }
+
+  .log-line { color: var(--text); }
+  .log-line.info { color: var(--cyan); }
+  .log-line.warn { color: var(--yellow); }
+  .log-line.crit { color: var(--red); }
+  .log-line.ok { color: var(--green); }
+
+  .alarm-list {
+    height: 80px;
+    overflow-y: auto;
+    font-size: 10px;
+  }
+
+  .alarm-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 0;
+    border-bottom: 1px solid #0d1f30;
+  }
+
+  .alarm-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .tooltip-box {
+    position: fixed;
+    background: rgba(5, 20, 35, 0.97);
+    border: 1px solid var(--cyan);
+    border-radius: 6px;
+    padding: 12px 16px;
+    max-width: 300px;
+    z-index: 1000;
+    pointer-events: none;
+    font-size: 12px;
+    line-height: 1.6;
+    box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);
+  }
+
+  .tooltip-title {
+    color: var(--cyan);
+    font-weight: bold;
+    font-size: 13px;
+    margin-bottom: 6px;
+    letter-spacing: 1px;
+  }
+
+  .tooltip-body { color: var(--bright); }
+
+  .tooltip-status {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    color: var(--green);
+    font-size: 11px;
+  }
+
+  .scram-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(255, 0, 30, 0.15);
+    z-index: 500;
+    pointer-events: none;
+    display: none;
+    animation: scram-flash 0.5s ease-in-out infinite;
+  }
+
+  @keyframes scram-flash {
+    0%, 100% { background: rgba(255, 0, 30, 0.05); }
+    50% { background: rgba(255, 0, 30, 0.25); }
+  }
+
+  .scram-banner {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--red);
+    color: #fff;
+    font-size: 36px;
+    font-weight: bold;
+    letter-spacing: 6px;
+    padding: 20px 48px;
+    z-index: 600;
+    display: none;
+    text-align: center;
+    box-shadow: 0 0 60px var(--red);
+    animation: scram-flash 0.4s infinite;
+  }
+
+  .mode-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+  }
+
+  .mode-tab {
+    flex: 1;
+    padding: 6px 4px;
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-align: center;
+    cursor: pointer;
+    color: var(--text);
+    background: transparent;
+    border: none;
+    font-family: 'Courier New', monospace;
+    text-transform: uppercase;
+    transition: all 0.2s;
+  }
+
+  .mode-tab.active {
+    background: var(--border);
+    color: var(--bright);
+  }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .scenario-btn {
+    display: block;
+    width: 100%;
+    margin-bottom: 6px;
+    padding: 7px 10px;
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-align: left;
+    border: 1px solid var(--border);
+    background: #060e18;
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .scenario-btn:hover {
+    border-color: var(--orange);
+    color: var(--orange);
+  }
+
+  .scenario-btn.danger {
+    border-color: #3a0a10;
+    color: #884455;
+  }
+
+  .scenario-btn.danger:hover {
+    border-color: var(--red);
+    color: var(--red);
+    background: #1a050a;
+  }
+
+  .bottom-meter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 120px;
+  }
+
+  .bottom-meter-label {
+    font-size: 9px;
+    color: var(--text);
+    letter-spacing: 1px;
+    white-space: nowrap;
+  }
+
+  .mini-bar {
+    flex: 1;
+    height: 6px;
+    background: #060e18;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    min-width: 60px;
+  }
+
+  .mini-fill {
+    height: 100%;
+    background: var(--green);
+    transition: width 0.5s;
+  }
+
+  .mini-val {
+    font-size: 10px;
+    color: var(--green);
+    min-width: 36px;
+    text-align: right;
+  }
+
+  svg text { pointer-events: none; }
+
+  .reactor-component {
+    cursor: pointer;
+    transition: filter 0.2s;
+  }
+
+  .reactor-component:hover {
+    filter: brightness(1.5) drop-shadow(0 0 8px rgba(0,212,255,0.6));
+  }
+
+  .reactor-component.active-glow {
+    filter: brightness(1.2) drop-shadow(0 0 4px rgba(0,255,136,0.4));
+  }
+
+  .reactor-component.warn-glow {
+    filter: brightness(1.2) drop-shadow(0 0 6px rgba(255,221,0,0.6));
+  }
+
+  .reactor-component.crit-glow {
+    filter: brightness(1.3) drop-shadow(0 0 10px rgba(255,34,68,0.8));
+  }
+
+  .info-panel {
+    background: #060e18;
+    border: 1px solid var(--border);
+    padding: 10px;
+    margin-bottom: 10px;
+    font-size: 11px;
+    line-height: 1.7;
+    color: var(--bright);
+  }
+
+  .info-panel strong { color: var(--cyan); }
+</style>
+</head>
+<body>
+
+<div class="scram-overlay" id="scramOverlay"></div>
+<div class="scram-banner" id="scramBanner">⚠ REACTOR SCRAM ⚠<br><span style="font-size:16px;letter-spacing:2px">EMERGENCY SHUTDOWN INITIATED</span></div>
+
+<div class="tooltip-box" id="tooltip" style="display:none"></div>
+
+<header>
+  <div class="plant-id">VVER-1200 · UNIT 1 · NPP SIMULATOR</div>
+  <div class="header-right">
+    <div class="status-led"><div class="led" id="mainLed"></div><span id="mainStatus">NORMAL OPERATION</span></div>
+    <div class="status-led"><div class="led yellow"></div><span>MCC ONLINE</span></div>
+    <div class="status-led"><div class="led" id="coolantLed"></div><span id="coolantStatus">COOLANT FLOW: OK</span></div>
+    <div class="datetime" id="clock"></div>
+  </div>
+</header>
+
+<div class="main-grid">
+
+  <!-- LEFT PANEL -->
+  <div class="left-panel panel">
+    <div class="panel-title">REACTOR PARAMETERS</div>
+
+    <div class="gauge-row">
+      <div class="gauge">
+        <div class="gauge-label">Thermal Power</div>
+        <div class="gauge-value" id="g-power">100</div>
+        <div class="gauge-unit">%</div>
+      </div>
+      <div class="gauge">
+        <div class="gauge-label">Neutron Flux</div>
+        <div class="gauge-value" id="g-flux">3.2</div>
+        <div class="gauge-unit">×10¹³ n/cm²s</div>
+      </div>
+    </div>
+
+    <div class="gauge-row">
+      <div class="gauge">
+        <div class="gauge-label">Core Temp</div>
+        <div class="gauge-value" id="g-ctemp">325</div>
+        <div class="gauge-unit">°C</div>
+      </div>
+      <div class="gauge">
+        <div class="gauge-label">Pressure</div>
+        <div class="gauge-value" id="g-pressure">157</div>
+        <div class="gauge-unit">bar</div>
+      </div>
+    </div>
+
+    <div class="bar-gauge">
+      <div class="bar-label"><span>Control Rods</span><span id="rod-val">80</span>%</div>
+      <div class="bar-track"><div class="bar-fill" id="rod-bar" style="width:80%"></div></div>
+    </div>
+
+    <div class="bar-gauge">
+      <div class="bar-label"><span>Coolant Flow</span><span id="flow-val">100</span>%</div>
+      <div class="bar-track"><div class="bar-fill" id="flow-bar" style="width:100%"></div></div>
+    </div>
+
+    <div class="bar-gauge">
+      <div class="bar-label"><span>Steam Gen. Level</span><span id="sg-val">65</span>%</div>
+      <div class="bar-track"><div class="bar-fill" id="sg-bar" style="width:65%"></div></div>
+    </div>
+
+    <div class="bar-gauge">
+      <div class="bar-label"><span>Turbine Load</span><span id="turb-val">100</span>%</div>
+      <div class="bar-track"><div class="bar-fill" id="turb-bar" style="width:100%"></div></div>
+    </div>
+
+    <div class="bar-gauge">
+      <div class="bar-label"><span>Containment Pressure</span><span id="cont-val">1.0</span> bar</div>
+      <div class="bar-track"><div class="bar-fill" id="cont-bar" style="width:10%"></div></div>
+    </div>
+
+    <div style="margin-top:12px;">
+      <div class="panel-title">PRIMARY LOOP TEMPS</div>
+      <div style="font-size:11px; display:grid; grid-template-columns:1fr 1fr; gap:4px;">
+        <div>T-hot: <span id="t-hot" style="color:var(--orange)">325°C</span></div>
+        <div>T-cold: <span id="t-cold" style="color:var(--cyan)">293°C</span></div>
+        <div>ΔT: <span id="delta-t" style="color:var(--green)">32°C</span></div>
+        <div>Flow: <span id="primary-flow" style="color:var(--green)">85.6 t/h</span></div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px;">
+      <div class="panel-title">SAFETY SYSTEMS</div>
+      <div class="alarm-list" id="safety-list"></div>
+    </div>
+  </div>
+
+  <!-- CENTER TOP: Mode tabs & info -->
+  <div class="center-top">
+    <div style="width:100%; max-width:600px;">
+      <div class="mode-tabs">
+        <button class="mode-tab active" onclick="switchTab('reactor')">REACTOR VIEW</button>
+        <button class="mode-tab" onclick="switchTab('process')">PROCESS FLOW</button>
+        <button class="mode-tab" onclick="switchTab('physics')">NUCLEAR PHYSICS</button>
+        <button class="mode-tab" onclick="switchTab('safety')">SAFETY SYSTEMS</button>
+      </div>
+
+      <div class="tab-content active" id="tab-reactor">
+        <div class="info-panel">
+          <strong>VVER-1200</strong> — pressurized water reactor, 3200 MW thermal / 1200 MW electric. Primary coolant at <strong>157 bar</strong> remains liquid above 325°C. Hover over any reactor component for detailed information.
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-process">
+        <div class="info-panel">
+          <strong>Thermodynamic cycle:</strong> Fission heat → primary coolant (loop 1) → steam generator (heat exchanger) → secondary steam loop → turbine → generator → condenser → feedwater pump → steam generator. Two isolated loops prevent radioactive contamination of the turbine.
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-physics">
+        <div class="info-panel">
+          <strong>Nuclear fission:</strong> ²³⁵U absorbs a slow (thermal) neutron → unstable ²³⁶U → splits into two fission fragments + 2–3 fast neutrons + ~200 MeV energy. Water moderator slows neutrons (eV range). Control rods (B₄C/Hf) absorb neutrons to regulate chain reaction. k<sub>eff</sub> = 1.000 at criticality.
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-safety">
+        <div class="info-panel">
+          <strong>Defence-in-depth:</strong> 1) Fuel ceramic matrix · 2) Zircaloy cladding · 3) Reactor pressure vessel (steel, 30 cm) · 4) Primary circuit · 5) Containment building (prestressed concrete, 1.2 m). ECCS, passive core flood tanks, emergency boration system, and auto SCRAM protect against all design-basis accidents.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- REACTOR SVG AREA -->
+  <div class="reactor-area" id="reactorArea">
+    <svg id="reactorSvg" viewBox="0 0 900 600" style="width:100%;height:100%;max-width:900px;">
+      <defs>
+        <radialGradient id="coreGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#00ff88" stop-opacity="0.4"/>
+          <stop offset="100%" stop-color="#00ff88" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="vesselGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#1a3a5a"/>
+          <stop offset="50%" stop-color="#243d5c"/>
+          <stop offset="100%" stop-color="#1a3a5a"/>
+        </linearGradient>
+        <linearGradient id="steamGen" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#1a2a3a"/>
+          <stop offset="100%" stop-color="#2a3a4a"/>
+        </linearGradient>
+        <linearGradient id="hotLeg" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#cc4400"/>
+          <stop offset="100%" stop-color="#ff6600"/>
+        </linearGradient>
+        <linearGradient id="coldLeg" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#005588"/>
+          <stop offset="100%" stop-color="#0088cc"/>
+        </linearGradient>
+        <linearGradient id="turbineGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+          <stop offset="0%" stop-color="#1a2a3a"/>
+          <stop offset="100%" stop-color="#2a4a6a"/>
+        </linearGradient>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+          <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <marker id="arrowBlue" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="#0088cc"/>
+        </marker>
+        <marker id="arrowRed" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="#ff6600"/>
+        </marker>
+        <marker id="arrowGreen" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="#00ff88"/>
+        </marker>
+        <marker id="arrowGray" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="#446688"/>
+        </marker>
+      </defs>
+
+      <!-- BACKGROUND GRID -->
+      <rect width="900" height="600" fill="#050a0f"/>
+      <g stroke="#0a1a28" stroke-width="1" opacity="0.5">
+        <line x1="0" y1="50" x2="900" y2="50"/>
+        <line x1="0" y1="100" x2="900" y2="100"/>
+        <line x1="0" y1="150" x2="900" y2="150"/>
+        <line x1="0" y1="200" x2="900" y2="200"/>
+        <line x1="0" y1="250" x2="900" y2="250"/>
+        <line x1="0" y1="300" x2="900" y2="300"/>
+        <line x1="0" y1="350" x2="900" y2="350"/>
+        <line x1="0" y1="400" x2="900" y2="400"/>
+        <line x1="0" y1="450" x2="900" y2="450"/>
+        <line x1="0" y1="500" x2="900" y2="500"/>
+        <line x1="0" y1="550" x2="900" y2="550"/>
+        <line x1="50" y1="0" x2="50" y2="600"/>
+        <line x1="100" y1="0" x2="100" y2="600"/>
+        <line x1="150" y1="0" x2="150" y2="600"/>
+        <line x1="200" y1="0" x2="200" y2="600"/>
+        <line x1="250" y1="0" x2="250" y2="600"/>
+        <line x1="300" y1="0" x2="300" y2="600"/>
+        <line x1="350" y1="0" x2="350" y2="600"/>
+        <line x1="400" y1="0" x2="400" y2="600"/>
+        <line x1="450" y1="0" x2="450" y2="600"/>
+        <line x1="500" y1="0" x2="500" y2="600"/>
+        <line x1="550" y1="0" x2="550" y2="600"/>
+        <line x1="600" y1="0" x2="600" y2="600"/>
+        <line x1="650" y1="0" x2="650" y2="600"/>
+        <line x1="700" y1="0" x2="700" y2="600"/>
+        <line x1="750" y1="0" x2="750" y2="600"/>
+        <line x1="800" y1="0" x2="800" y2="600"/>
+        <line x1="850" y1="0" x2="850" y2="600"/>
+      </g>
+
+      <!-- CONTAINMENT BUILDING OUTLINE -->
+      <ellipse cx="230" cy="300" rx="190" ry="260" fill="none" stroke="#1a3a5a" stroke-width="2" stroke-dasharray="8,4" opacity="0.6"/>
+      <text x="230" y="26" fill="#1a3a5a" font-size="9" text-anchor="middle" letter-spacing="2">CONTAINMENT</text>
+
+      <!-- PRIMARY LOOP PIPES -->
+      <!-- Hot leg: RPV right → Steam Generator -->
+      <path d="M 305 280 Q 340 280 360 260 L 380 260" stroke="url(#hotLeg)" stroke-width="10" fill="none" stroke-linecap="round" class="reactor-component" id="pipe-hot"
+        data-title="Hot Leg — Primary Loop"
+        data-info="Carries superheated primary coolant (325°C, 157 bar) from the reactor pressure vessel to the steam generator. The coolant absorbs heat from nuclear fission and transports it to the heat exchanger. The high pressure prevents boiling despite temperatures well above 100°C."
+        data-status="T=325°C | P=157 bar | Flow=85.6 t/h"/>
+      <path d="M 305 280 Q 340 280 360 260 L 380 260" stroke="#ff6600" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.5" stroke-dasharray="8,4">
+        <animate attributeName="stroke-dashoffset" from="0" to="-24" dur="0.8s" repeatCount="indefinite"/>
+      </path>
+
+      <!-- Cold leg: Steam Generator → MCP → RPV left -->
+      <path d="M 382 330 L 360 330 Q 340 330 320 340 L 310 340 L 295 320" stroke="url(#coldLeg)" stroke-width="10" fill="none" stroke-linecap="round" class="reactor-component" id="pipe-cold"
+        data-title="Cold Leg — Primary Loop"
+        data-info="Returns cooled primary coolant (293°C) from the steam generator back to the reactor. The coolant has transferred heat to the secondary loop and is ready to absorb more fission energy. The main circulation pump drives flow through this circuit continuously."
+        data-status="T=293°C | P=157 bar | Flow=85.6 t/h"/>
+      <path d="M 382 330 L 360 330 Q 340 330 320 340 L 310 340 L 295 320" stroke="#0088cc" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.5" stroke-dasharray="8,4">
+        <animate attributeName="stroke-dashoffset" from="0" to="24" dur="1.2s" repeatCount="indefinite"/>
+      </path>
+
+      <!-- REACTOR PRESSURE VESSEL -->
+      <g class="reactor-component" id="rpv"
+        data-title="Reactor Pressure Vessel (RPV)"
+        data-info="The RPV is the primary pressure boundary — a 11.8 m tall, 4.5 m diameter steel vessel (16Cr3NiMoVNb alloy) with 300 mm thick walls. It contains the core, reflector, and control rod drives. Designed to withstand 160 bar and retain integrity in Design Basis Accidents. Cannot be replaced — vessel lifetime limits plant life."
+        data-status="P=157 bar | T-wall=292°C | Fluence: 4.2×10²² n/cm²">
+        <rect x="215" y="130" width="90" height="340" rx="12" fill="url(#vesselGrad)" stroke="#2a5a8a" stroke-width="2"/>
+        <rect x="221" y="136" width="78" height="328" rx="10" fill="#060e18"/>
+
+        <!-- Core glow -->
+        <ellipse cx="260" cy="300" rx="35" ry="80" fill="url(#coreGlow)" id="coreGlowEl">
+          <animate attributeName="rx" values="30;38;30" dur="2s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0.8;1;0.8" dur="2s" repeatCount="indefinite"/>
+        </ellipse>
+
+        <!-- Fuel assemblies (simplified) -->
+        <g id="fuelAssemblies">
+          <rect x="235" y="220" width="8" height="140" rx="2" fill="#22aa66" opacity="0.9"/>
+          <rect x="248" y="215" width="8" height="150" rx="2" fill="#22aa66" opacity="0.9"/>
+          <rect x="261" y="218" width="8" height="145" rx="2" fill="#22aa66" opacity="0.9"/>
+          <rect x="274" y="220" width="8" height="140" rx="2" fill="#22aa66" opacity="0.9"/>
+          <rect x="287" y="225" width="5" height="130" rx="2" fill="#22aa66" opacity="0.9"/>
+          <rect x="228" y="225" width="5" height="130" rx="2" fill="#22aa66" opacity="0.9"/>
+
+          <!-- Neutron glow flashes -->
+          <circle cx="260" cy="290" r="3" fill="#ffffff" opacity="0">
+            <animate attributeName="opacity" values="0;0.8;0" dur="0.3s" repeatCount="indefinite" begin="0s"/>
+          </circle>
+          <circle cx="252" cy="310" r="2" fill="#aaffcc" opacity="0">
+            <animate attributeName="opacity" values="0;1;0" dur="0.4s" repeatCount="indefinite" begin="0.15s"/>
+          </circle>
+          <circle cx="272" cy="280" r="2" fill="#aaffcc" opacity="0">
+            <animate attributeName="opacity" values="0;1;0" dur="0.35s" repeatCount="indefinite" begin="0.25s"/>
+          </circle>
+        </g>
+
+        <!-- Control rods -->
+        <g id="controlRods">
+          <rect x="236" y="136" width="6" height="110" rx="2" fill="#4488aa" id="rod1">
+            <animate attributeName="height" from="110" to="110" dur="1s" fill="freeze" id="rod1anim"/>
+          </rect>
+          <rect x="249" y="136" width="6" height="95" rx="2" fill="#4488aa" id="rod2"/>
+          <rect x="262" y="136" width="6" height="100" rx="2" fill="#4488aa" id="rod3"/>
+          <rect x="275" y="136" width="6" height="95" rx="2" fill="#4488aa" id="rod4"/>
+          <rect x="288" y="136" width="4" height="90" rx="2" fill="#4488aa" id="rod5"/>
+        </g>
+
+        <text x="260" y="490" fill="#2a5a8a" font-size="8" text-anchor="middle">RPV</text>
+      </g>
+
+      <!-- RPV HEAD with drives -->
+      <rect x="220" y="118" width="80" height="18" rx="4" fill="#1a3a5a" stroke="#2a5a8a" stroke-width="1.5" class="reactor-component"
+        data-title="Reactor Upper Head & CRDM"
+        data-info="The upper head houses Control Rod Drive Mechanisms (CRDMs). In VVER, rods are driven by electric motors. Upon loss of power, rods fall by gravity into the core (fail-safe). The head is bolted with 50+ studs and opened during refuelling outages (every 12-18 months)."
+        data-status="CRDMs: ALL ENGAGED | Last refuel: 14 months ago"/>
+
+      <!-- PRESSURIZER -->
+      <g class="reactor-component" id="pressurizer"
+        data-title="Pressurizer"
+        data-info="Maintains constant primary system pressure at 157 bar (±0.5 bar). Contains water/steam mixture. Electric heaters raise pressure when it drops; spray system lowers pressure when it rises. A relief valve protects against overpressure. Critical for keeping primary coolant liquid (saturation temp at 157 bar is ~347°C)."
+        data-status="P=157.2 bar | T=345°C | Level=65% | Heaters: STANDBY">
+        <rect x="100" y="170" width="40" height="90" rx="6" fill="#1a2a3a" stroke="#2a4a6a" stroke-width="1.5"/>
+        <rect x="104" y="174" width="32" height="82" rx="4" fill="#060e18"/>
+        <!-- water level in pressurizer -->
+        <rect x="104" y="215" width="32" height="41" rx="2" fill="#004488" opacity="0.6" id="przLevel"/>
+        <!-- steam zone -->
+        <ellipse cx="120" cy="210" rx="14" ry="4" fill="#223344" opacity="0.5"/>
+        <!-- heater line -->
+        <line x1="140" y1="250" x2="215" y2="310" stroke="#2a5a8a" stroke-width="4" stroke-linecap="round"/>
+        <text x="120" y="275" fill="#2a5a8a" font-size="8" text-anchor="middle">PRZ</text>
+      </g>
+
+      <!-- STEAM GENERATOR -->
+      <g class="reactor-component" id="steamGenerator"
+        data-title="Steam Generator (SG-1)"
+        data-info="Horizontal U-tube heat exchanger (VVER design uses horizontal SGs, unlike western PWRs). 11,000 steam tubes transfer heat from primary (radioactive, 325°C) to secondary (clean) loop without mixing fluids. Secondary water boils to steam at ~6.2 MPa, 278°C. Each VVER-1200 has 4 steam generators."
+        data-status="Level=65% | T-sec=278°C | P-sec=62 bar | Steam flow=1680 t/h">
+        <rect x="380" y="220" width="130" height="150" rx="8" fill="url(#steamGen)" stroke="#2a4a6a" stroke-width="2"/>
+        <rect x="386" y="226" width="118" height="138" rx="6" fill="#060e18"/>
+
+        <!-- U-tubes inside SG -->
+        <g stroke="#1a4a6a" stroke-width="1.5" fill="none">
+          <path d="M 400 310 L 400 260 Q 400 245 415 245 Q 430 245 430 260 L 430 310"/>
+          <path d="M 415 310 L 415 265 Q 415 255 425 255 Q 435 255 435 265 L 435 310"/>
+          <path d="M 432 310 L 432 262 Q 432 250 445 250 Q 458 250 458 262 L 458 310"/>
+          <path d="M 458 310 L 458 260 Q 458 248 470 248 Q 482 248 482 260 L 482 310"/>
+        </g>
+
+        <!-- Water level in SG -->
+        <rect x="386" y="260" width="118" height="104" rx="4" fill="#003355" opacity="0.4" id="sgWaterLevel"/>
+        <!-- Boiling bubbles -->
+        <circle cx="410" cy="280" r="2" fill="#aaddff" opacity="0">
+          <animate attributeName="cy" from="310" to="255" dur="1.5s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0;0.7;0" dur="1.5s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="440" cy="280" r="1.5" fill="#aaddff" opacity="0">
+          <animate attributeName="cy" from="310" to="250" dur="1.8s" repeatCount="indefinite" begin="0.4s"/>
+          <animate attributeName="opacity" values="0;0.6;0" dur="1.8s" repeatCount="indefinite" begin="0.4s"/>
+        </circle>
+        <circle cx="470" cy="280" r="2" fill="#aaddff" opacity="0">
+          <animate attributeName="cy" from="310" to="255" dur="1.3s" repeatCount="indefinite" begin="0.8s"/>
+          <animate attributeName="opacity" values="0;0.7;0" dur="1.3s" repeatCount="indefinite" begin="0.8s"/>
+        </circle>
+
+        <text x="445" y="375" fill="#2a4a6a" font-size="8" text-anchor="middle">STEAM GEN</text>
+      </g>
+
+      <!-- MCP - Main Coolant Pump -->
+      <g class="reactor-component" id="mcp"
+        data-title="Main Circulation Pump (MCP)"
+        data-info="Drives primary coolant circulation at 85,600 t/h against system pressure of 157 bar. Motor power: 8 MW. In VVER-1200 the MCP is located on the cold leg. Loss of all MCPs triggers an automatic reactor SCRAM and initiates coast-down mode — residual heat removal takes over. Flywheel ensures 30-second flow coast-down."
+        data-status="Speed=1485 rpm | Flow=85.6 t/h | Motor: 8 MW | Seal: OK">
+        <circle cx="335" cy="355" r="22" fill="#1a2a3a" stroke="#2a5a8a" stroke-width="2"/>
+        <circle cx="335" cy="355" r="16" fill="#060e18"/>
+        <!-- Impeller animation -->
+        <g transform="translate(335,355)" id="mcpImpeller">
+          <line x1="0" y1="-10" x2="0" y2="10" stroke="#0088cc" stroke-width="2">
+            <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="0.5s" repeatCount="indefinite"/>
+          </line>
+          <line x1="-10" y1="0" x2="10" y2="0" stroke="#0088cc" stroke-width="2">
+            <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="0.5s" repeatCount="indefinite"/>
+          </line>
+          <line x1="-7" y1="-7" x2="7" y2="7" stroke="#0055aa" stroke-width="1.5">
+            <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="0.5s" repeatCount="indefinite"/>
+          </line>
+        </g>
+        <text x="335" y="390" fill="#2a5a8a" font-size="8" text-anchor="middle">MCP</text>
+      </g>
+
+      <!-- SECONDARY LOOP -->
+      <!-- Steam line to turbine -->
+      <path d="M 510 250 L 580 250 L 580 200 L 630 200" stroke="#446688" stroke-width="8" fill="none" stroke-linecap="round" class="reactor-component" id="steam-line"
+        data-title="Main Steam Line"
+        data-info="Carries saturated/superheated steam at 62 bar, 278°C from all four steam generators to the turbine stop valves. Steam flow rate: ~1680 t/h per SG. Main Steam Isolation Valves (MSIV) can close in <5 seconds on high steam line radiation signal, isolating the secondary circuit."
+        data-status="P=62 bar | T=278°C | Flow=1680 t/h | MSIVs: OPEN"/>
+      <path d="M 510 250 L 580 250 L 580 200 L 630 200" stroke="#aaccee" stroke-width="3" fill="none" stroke-dasharray="10,5" opacity="0.4">
+        <animate attributeName="stroke-dashoffset" from="0" to="-30" dur="1s" repeatCount="indefinite"/>
+      </path>
+
+      <!-- TURBINE -->
+      <g class="reactor-component" id="turbine"
+        data-title="Steam Turbine (LP+HP)"
+        data-info="A two-cylinder turbine (1 HP + 3 LP) converts steam enthalpy to mechanical rotation at 3000 rpm (50 Hz). Steam expands from 62 bar to ~0.06 bar in the condenser. Moisture separators between HP and LP cylinders remove water droplets that erode blades. Rated at 1200 MW electrical."
+        data-status="Speed=3000 rpm | Power=1197 MW | Steam in=62 bar | Exhaust=0.06 bar">
+        <rect x="630" y="155" width="110" height="90" rx="6" fill="url(#turbineGrad)" stroke="#2a4a6a" stroke-width="2"/>
+        <!-- Turbine blades graphic -->
+        <g stroke="#1a4a6a" stroke-width="1">
+          <line x1="650" y1="165" x2="650" y2="235"/>
+          <line x1="665" y1="162" x2="665" y2="238"/>
+          <line x1="680" y1="160" x2="680" y2="240"/>
+          <line x1="695" y1="162" x2="695" y2="238"/>
+          <line x1="710" y1="165" x2="710" y2="235"/>
+          <line x1="725" y1="168" x2="725" y2="232"/>
+        </g>
+        <!-- Rotation indicator -->
+        <circle cx="685" cy="200" r="18" fill="none" stroke="#0066aa" stroke-width="1.5" stroke-dasharray="5,5">
+          <animateTransform attributeName="transform" type="rotate" from="0 685 200" to="360 685 200" dur="0.6s" repeatCount="indefinite"/>
+        </circle>
+        <text x="685" y="258" fill="#2a4a6a" font-size="8" text-anchor="middle">TURBINE</text>
+      </g>
+
+      <!-- GENERATOR -->
+      <g class="reactor-component" id="generator"
+        data-title="Synchronous Generator"
+        data-info="The turbine shaft drives a 3-phase synchronous generator (hydrogen-cooled stator) producing 1200 MW at 24 kV, 50 Hz. A step-up transformer feeds the 330/500 kV grid. Generator excitation controls reactive power. Loss of grid (load rejection) causes turbine trip and reactor power reduction."
+        data-status="P=1197 MW | U=24 kV | f=50.0 Hz | cos φ=0.9">
+        <rect x="755" y="165" width="80" height="70" rx="5" fill="#111a25" stroke="#2a5a2a" stroke-width="2"/>
+        <rect x="760" y="170" width="70" height="60" rx="3" fill="#060e18"/>
+        <text x="795" y="196" fill="#2a5a2a" font-size="8" text-anchor="middle">GENERATOR</text>
+        <text x="795" y="208" fill="#00ff88" font-size="9" text-anchor="middle" id="genOutput">1197 MW</text>
+        <text x="795" y="222" fill="#446688" font-size="7" text-anchor="middle">24 kV · 50 Hz</text>
+        <!-- Output bolt/symbol -->
+        <path d="M 780 228 L 788 218 L 784 225 L 792 215 L 800 228" fill="none" stroke="#ffdd00" stroke-width="1.5"/>
+      </g>
+
+      <!-- CONDENSER -->
+      <g class="reactor-component" id="condenser"
+        data-title="Main Condenser"
+        data-info="Converts exhaust steam (0.06 bar, 36°C) back to liquid water using cooling water from a cooling tower or river. Creates vacuum that maximises turbine work output (Carnot efficiency). Hotwell collects condensate for return to steam generators via feedwater pumps. Condenser vacuum loss = turbine trip."
+        data-status="P=0.060 bar | T=36°C | Vacuum: 98.2% | CW flow: 48,000 t/h">
+        <rect x="630" y="340" width="110" height="55" rx="5" fill="#0a1a25" stroke="#2a3a4a" stroke-width="1.5"/>
+        <!-- Cooling tubes -->
+        <g stroke="#0a2a3a" stroke-width="1">
+          <line x1="645" y1="350" x2="645" y2="385"/>
+          <line x1="658" y1="350" x2="658" y2="385"/>
+          <line x1="671" y1="350" x2="671" y2="385"/>
+          <line x1="684" y1="350" x2="684" y2="385"/>
+          <line x1="697" y1="350" x2="697" y2="385"/>
+          <line x1="710" y1="350" x2="710" y2="385"/>
+          <line x1="723" y1="350" x2="723" y2="385"/>
+        </g>
+        <text x="685" y="408" fill="#2a3a4a" font-size="8" text-anchor="middle">CONDENSER</text>
+      </g>
+
+      <!-- Exhaust steam to condenser -->
+      <path d="M 685 245 L 685 340" stroke="#2a4a5a" stroke-width="8" fill="none" class="reactor-component" id="exhaust-line"
+        data-title="Turbine Exhaust (Low Pressure Steam)"
+        data-info="Steam exits the LP turbine at only 0.06 bar — nearly vacuum. This extreme pressure drop is what makes turbines efficient. The low pressure is maintained by the condenser cooling. The steam quality is typically 85-90% (wet steam), which is why moisture separators are important to prevent blade erosion."
+        data-status="P=0.060 bar | Quality=88% | T=36°C"/>
+
+      <!-- Feedwater line -->
+      <path d="M 685 395 L 685 440 L 510 440 L 510 360" stroke="#004488" stroke-width="6" fill="none" stroke-linecap="round" class="reactor-component" id="feedwater"
+        data-title="Feedwater System"
+        data-info="High-pressure feedwater pumps (20 MW each) return condensate from the condenser hotwell back to the steam generators. Feedwater heaters use extracted steam to preheat feedwater, increasing thermal efficiency from ~28% to ~33%. The deaerator removes dissolved oxygen to prevent corrosion."
+        data-status="T=230°C | P=70 bar | Flow=1680 t/h | Pumps: A+B running"/>
+      <path d="M 685 395 L 685 440 L 510 440 L 510 360" stroke="#0088cc" stroke-width="2" fill="none" stroke-dasharray="8,4" opacity="0.5">
+        <animate attributeName="stroke-dashoffset" from="0" to="24" dur="1.5s" repeatCount="indefinite"/>
+      </path>
+
+      <!-- COOLING TOWER -->
+      <g class="reactor-component" id="coolingTower"
+        data-title="Cooling Tower"
+        data-info="Natural-draft hyperbolic cooling tower (165 m tall) removes waste heat from condenser cooling water. Hot cooling water sprays at the base; upward air draft evaporates ~3% of water, cooling the rest by ~10°C. Make-up water compensates evaporation losses (~3000 t/h). NOT a radioactive emission — it's pure water vapour."
+        data-status="CW inlet=27°C | CW outlet=37°C | Drift: <0.001%">
+        <path d="M 820 450 L 790 340 L 820 300 L 850 340 L 820 450" fill="#0a1520" stroke="#2a3a4a" stroke-width="1.5"/>
+        <ellipse cx="820" cy="450" rx="30" ry="8" fill="none" stroke="#2a3a4a" stroke-width="1.5"/>
+        <ellipse cx="820" cy="300" rx="16" ry="4" fill="none" stroke="#2a4a5a" stroke-width="1"/>
+        <!-- Steam rising from tower -->
+        <g opacity="0.4" fill="#aaddff">
+          <circle cx="812" cy="285" r="4">
+            <animate attributeName="cy" from="295" to="255" dur="3s" repeatCount="indefinite"/>
+            <animate attributeName="opacity" values="0.5;0" dur="3s" repeatCount="indefinite"/>
+          </circle>
+          <circle cx="820" cy="280" r="5">
+            <animate attributeName="cy" from="295" to="250" dur="2.5s" repeatCount="indefinite" begin="0.5s"/>
+            <animate attributeName="opacity" values="0.4;0" dur="2.5s" repeatCount="indefinite" begin="0.5s"/>
+          </circle>
+          <circle cx="828" cy="285" r="3">
+            <animate attributeName="cy" from="295" to="260" dur="3.5s" repeatCount="indefinite" begin="1s"/>
+            <animate attributeName="opacity" values="0.3;0" dur="3.5s" repeatCount="indefinite" begin="1s"/>
+          </circle>
+        </g>
+        <text x="820" y="472" fill="#2a3a4a" font-size="8" text-anchor="middle">COOLING TWR</text>
+      </g>
+
+      <!-- Condenser cooling water lines -->
+      <path d="M 740 362 Q 780 362 780 410 Q 780 450 820 450" stroke="#004060" stroke-width="4" fill="none" stroke-dasharray="6,3">
+        <animate attributeName="stroke-dashoffset" from="0" to="-18" dur="2s" repeatCount="indefinite"/>
+      </path>
+      <path d="M 820 450 Q 820 480 760 490 Q 700 490 685 415" stroke="#003a55" stroke-width="4" fill="none" stroke-dasharray="6,3" opacity="0.6">
+        <animate attributeName="stroke-dashoffset" from="0" to="-18" dur="2s" repeatCount="indefinite"/>
+      </path>
+
+      <!-- ECCS TANK (Emergency Core Cooling) -->
+      <g class="reactor-component" id="eccs"
+        data-title="Emergency Core Cooling System (ECCS)"
+        data-info="Passive safety system using high-pressure accumulators filled with borated water (boric acid absorbs neutrons, shutting down chain reaction). In a Loss-of-Coolant Accident (LOCA), accumulators inject into the core automatically at 60 bar, no pumps needed. The VVER-1200 also has passive core flooding tanks at 0.9 bar for long-term cooling."
+        data-status="ACC pressure=60 bar | Volume=60 m³ | Boron=16 g/L | Ready">
+        <rect x="90" y="390" width="55" height="70" rx="5" fill="#0a1a25" stroke="#2a5a2a" stroke-width="1.5"/>
+        <rect x="95" y="395" width="45" height="60" rx="3" fill="#003310" opacity="0.5"/>
+        <text x="117" y="425" fill="#2a5a2a" font-size="7" text-anchor="middle">ECCS</text>
+        <text x="117" y="437" fill="#00ff88" font-size="7" text-anchor="middle">READY</text>
+        <text x="117" y="449" fill="#2a5a2a" font-size="6" text-anchor="middle">60 bar</text>
+        <!-- Injection line (dashed) -->
+        <path d="M 145 430 L 215 360" stroke="#2a5a2a" stroke-width="3" stroke-dasharray="5,3"/>
+      </g>
+
+      <!-- SPENT FUEL POOL indication -->
+      <g class="reactor-component" id="sfp"
+        data-title="Spent Fuel Pool (SFP)"
+        data-info="Irradiated fuel assemblies are stored underwater for 5-7 years after removal from the core. Water provides biological shielding (10 m deep) and decay heat removal. Decay heat decreases from ~7% of full power immediately after shutdown to <1% after 1 hour, but continues for years. After cooling, fuel goes to dry cask storage."
+        data-status="T=35°C | Level: NORMAL | Cooling: A+B running | Dose: 12 mSv/h (surface)">
+        <rect x="90" y="480" width="55" height="40" rx="4" fill="#0a1525" stroke="#1a3a5a" stroke-width="1.5"/>
+        <rect x="94" y="484" width="47" height="32" rx="3" fill="#002244" opacity="0.6"/>
+        <text x="117" y="499" fill="#1a3a5a" font-size="7" text-anchor="middle">SPENT</text>
+        <text x="117" y="509" fill="#1a3a5a" font-size="7" text-anchor="middle">FUEL POOL</text>
+      </g>
+
+      <!-- LABELS AND FLOW ARROWS -->
+      <text x="148" y="310" fill="#446688" font-size="8" text-anchor="middle">PRIMARY</text>
+      <text x="148" y="320" fill="#446688" font-size="8" text-anchor="middle">LOOP</text>
+
+      <!-- Power output line -->
+      <path d="M 835 200 L 870 200 L 870 180 L 895 180" stroke="#ffdd00" stroke-width="3" stroke-dasharray="6,3">
+        <animate attributeName="stroke-dashoffset" from="0" to="-18" dur="0.6s" repeatCount="indefinite"/>
+      </path>
+      <text x="885" y="170" fill="#ffdd00" font-size="9" text-anchor="middle">GRID</text>
+      <text x="885" y="180" fill="#ffdd00" font-size="8" text-anchor="middle">330kV</text>
+
+      <!-- Section labels -->
+      <text x="445" y="590" fill="#1a3a5a" font-size="8" text-anchor="middle">SECONDARY LOOP (NON-RADIOACTIVE)</text>
+      <text x="230" y="18" fill="#1a3a5a" font-size="8" text-anchor="middle">RADIOACTIVE ZONE · CONTAINMENT BUILDING</text>
+
+      <!-- Turbine-to-condenser connection -->
+      <path d="M 685 245 L 685 340" stroke="#2a4a5a" stroke-width="8" fill="none"/>
+
+      <!-- Core activity dots - random neutron scatter -->
+      <circle cx="248" cy="250" r="1.5" fill="#00ff88" opacity="0">
+        <animate attributeName="cx" values="248;265;272;258;248" dur="0.8s" repeatCount="indefinite"/>
+        <animate attributeName="cy" values="250;260;280;310;250" dur="0.8s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;0.9;0.9;0;0" dur="0.8s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="270" cy="270" r="1.5" fill="#00ff88" opacity="0">
+        <animate attributeName="cx" values="270;255;245;260;270" dur="1s" repeatCount="indefinite" begin="0.2s"/>
+        <animate attributeName="cy" values="270;285;300;320;270" dur="1s" repeatCount="indefinite" begin="0.2s"/>
+        <animate attributeName="opacity" values="0;0.9;0.9;0;0" dur="1s" repeatCount="indefinite" begin="0.2s"/>
+      </circle>
+      <circle cx="260" cy="340" r="1.5" fill="#aaffcc" opacity="0">
+        <animate attributeName="cx" values="260;275;282;268;260" dur="0.7s" repeatCount="indefinite" begin="0.5s"/>
+        <animate attributeName="cy" values="340;325;310;295;340" dur="0.7s" repeatCount="indefinite" begin="0.5s"/>
+        <animate attributeName="opacity" values="0;0.8;0.8;0;0" dur="0.7s" repeatCount="indefinite" begin="0.5s"/>
+      </circle>
+
+    </svg>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel panel">
+    <div class="panel-title">OPERATOR CONTROLS</div>
+
+    <div class="control-group">
+      <div class="control-label">Control Rods — Insertion Depth</div>
+      <div class="slider-row">
+        <input type="range" id="rod-slider" min="0" max="100" value="80" oninput="setRods(this.value)">
+        <span class="slider-val" id="rod-slider-val">80%</span>
+      </div>
+      <div style="font-size:9px;color:#446688;margin-top:3px;">0% = fully inserted (shutdown) · 100% = fully withdrawn</div>
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">Coolant Pump Speed</div>
+      <div class="slider-row">
+        <input type="range" id="flow-slider" min="0" max="100" value="100" oninput="setFlow(this.value)">
+        <span class="slider-val" id="flow-slider-val">100%</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <div class="control-label">Turbine Governor</div>
+      <div class="slider-row">
+        <input type="range" id="turb-slider" min="0" max="100" value="100" oninput="setTurbine(this.value)">
+        <span class="slider-val" id="turb-slider-val">100%</span>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-green" onclick="normalOp()">NORMAL</button>
+      <button class="btn btn-red" onclick="scram()">SCRAM</button>
+      <button class="btn btn-yellow" onclick="reset()">RESET</button>
+    </div>
+
+    <div class="panel-title" style="margin-top:8px;">INCIDENT SCENARIOS</div>
+
+    <button class="scenario-btn" onclick="runScenario('loca')">LOCA — Loss of Coolant</button>
+    <button class="scenario-btn" onclick="runScenario('lofw')">LOFW — Loss of Feedwater</button>
+    <button class="scenario-btn" onclick="runScenario('lop')">LOP — Station Blackout</button>
+    <button class="scenario-btn danger" onclick="runScenario('chernobyl')">PWR Positive Void (Chernobyl)</button>
+    <button class="scenario-btn danger" onclick="runScenario('fukushima')">SBO + Tsunami (Fukushima)</button>
+    <button class="scenario-btn" onclick="runScenario('steamline')">Main Steam Line Break</button>
+    <button class="scenario-btn" onclick="runScenario('rod_ejection')">Rod Ejection Accident</button>
+
+    <div class="panel-title" style="margin-top:12px;">SYSTEM LOG</div>
+    <div class="log-area" id="logArea"></div>
+  </div>
+
+</div>
+
+<!-- BOTTOM BAR -->
+<div class="bottom-bar">
+  <div class="bottom-meter">
+    <div class="bottom-meter-label">REACTOR POWER</div>
+    <div class="mini-bar"><div class="mini-fill" id="bot-power" style="width:100%"></div></div>
+    <div class="mini-val" id="bot-power-val">100%</div>
+  </div>
+  <div class="bottom-meter">
+    <div class="bottom-meter-label">CORE TEMP</div>
+    <div class="mini-bar"><div class="mini-fill" id="bot-temp" style="width:54%"></div></div>
+    <div class="mini-val" id="bot-temp-val">325°C</div>
+  </div>
+  <div class="bottom-meter">
+    <div class="bottom-meter-label">PRIMARY P</div>
+    <div class="mini-bar"><div class="mini-fill" id="bot-press" style="width:98%"></div></div>
+    <div class="mini-val" id="bot-press-val">157 bar</div>
+  </div>
+  <div class="bottom-meter">
+    <div class="bottom-meter-label">NEUTRON FLUX</div>
+    <div class="mini-bar"><div class="mini-fill" id="bot-flux" style="width:100%"></div></div>
+    <div class="mini-val" id="bot-flux-val">3.2×10¹³</div>
+  </div>
+  <div class="bottom-meter">
+    <div class="bottom-meter-label">GRID OUTPUT</div>
+    <div class="mini-bar"><div class="mini-fill" id="bot-grid" style="width:100%"></div></div>
+    <div class="mini-val" id="bot-grid-val">1197 MW</div>
+  </div>
+  <div style="margin-left:auto;display:flex;gap:16px;align-items:center;">
+    <div style="font-size:10px;color:var(--text)">k<sub>eff</sub>: <span id="keff" style="color:var(--green)">1.000</span></div>
+    <div style="font-size:10px;color:var(--text)">DOUBLING TIME: <span id="doublingTime" style="color:var(--cyan)">∞</span></div>
+    <div style="font-size:10px;color:var(--text)">MODE: <span id="opMode" style="color:var(--green)">POWER OPERATION</span></div>
+  </div>
+</div>
+
+<script>
+const state = {
+  power: 100,
+  rods: 80,
+  flow: 100,
+  turbine: 100,
+  coreTemp: 325,
+  pressure: 157,
+  sgLevel: 65,
+  contPressure: 1.0,
+  scrammed: false,
+  scenario: null,
+  scenarioStep: 0,
+  scenarioTimer: null,
+  tHot: 325,
+  tCold: 293,
+};
+
+const safetySystemStatus = [
+  { name: 'ECCS Accumulator A', status: 'ARMED', color: '#00ff88' },
+  { name: 'ECCS Accumulator B', status: 'ARMED', color: '#00ff88' },
+  { name: 'Emergency Boration', status: 'READY', color: '#00ff88' },
+  { name: 'Containment Spray', status: 'STANDBY', color: '#00ff88' },
+  { name: 'Passive Core Flood', status: 'ARMED', color: '#00ff88' },
+  { name: 'Diesel Gen A', status: 'STANDBY', color: '#ffdd00' },
+  { name: 'Diesel Gen B', status: 'STANDBY', color: '#ffdd00' },
+  { name: 'Safety Relief Valve', status: 'CLOSED', color: '#00ff88' },
+];
+
+function buildSafetyList() {
+  const el = document.getElementById('safety-list');
+  el.innerHTML = '';
+  safetySystemStatus.forEach(s => {
+    const d = document.createElement('div');
+    d.className = 'alarm-item';
+    d.innerHTML = `<div class="alarm-dot" style="background:${s.color};box-shadow:0 0 4px ${s.color}"></div><span style="color:${s.color};font-size:10px">${s.name}: ${s.status}</span>`;
+    el.appendChild(d);
+  });
+}
+
+let logLines = [];
+function addLog(msg, type='') {
+  const t = new Date().toLocaleTimeString('en-GB');
+  logLines.unshift({ msg: `[${t}] ${msg}`, type });
+  if (logLines.length > 50) logLines.pop();
+  const el = document.getElementById('logArea');
+  el.innerHTML = logLines.map(l => `<div class="log-line ${l.type}">${l.msg}</div>`).join('');
+}
+
+function updateClock() {
+  document.getElementById('clock').textContent = new Date().toLocaleString('en-GB');
+}
+
+function calcPower() {
+  if (state.scrammed) return 0;
+  const rodFactor = Math.pow(state.rods / 100, 0.6);
+  const flowFactor = Math.min(1, state.flow / 80);
+  return Math.min(120, rodFactor * flowFactor * 100);
+}
+
+function updateState() {
+  state.power = calcPower();
+
+  const targetCoreTemp = 280 + (state.power / 100) * 80;
+  state.coreTemp += (targetCoreTemp - state.coreTemp) * 0.05;
+
+  const targetPressure = state.flow < 10 ? 157 + (100 - state.flow) * 0.2 : 157 - Math.max(0, (100 - state.flow) * 0.05);
+  state.pressure += (targetPressure - state.pressure) * 0.03;
+  if (state.scrammed) state.pressure -= 0.05;
+
+  const targetSgLevel = 45 + (state.turbine / 100) * 30;
+  state.sgLevel += (targetSgLevel - state.sgLevel) * 0.02;
+  if (state.scenario === 'lofw') state.sgLevel = Math.max(0, state.sgLevel - 0.5);
+
+  const targetTHot = 280 + (state.power / 100) * 55;
+  const targetTCold = 265 + (state.flow / 100) * 35;
+  state.tHot += (targetTHot - state.tHot) * 0.04;
+  state.tCold += (targetTCold - state.tCold) * 0.04;
+
+  checkAlarms();
+  updateUI();
+}
+
+function checkAlarms() {
+  let mainLedOk = true;
+  let coolantOk = true;
+
+  if (state.coreTemp > 360) {
+    mainLedOk = false;
+    addLog('HIGH CORE TEMPERATURE — SCRAM INITIATED', 'crit');
+    if (!state.scrammed) scram();
+  }
+  if (state.pressure > 175) {
+    mainLedOk = false;
+    addLog('OVERPRESSURE — SAFETY RELIEF VALVE OPENING', 'crit');
+    safetySystemStatus[7].status = 'OPEN';
+    safetySystemStatus[7].color = '#ff2244';
+    buildSafetyList();
+  } else {
+    safetySystemStatus[7].status = 'CLOSED';
+    safetySystemStatus[7].color = '#00ff88';
+  }
+  if (state.flow < 20 && !state.scrammed) {
+    coolantOk = false;
+    addLog('LOW COOLANT FLOW — TRIP SIGNAL', 'warn');
+  }
+  if (state.sgLevel < 10) {
+    addLog('STEAM GENERATOR LOW LEVEL — TRIP', 'crit');
+    if (!state.scrammed) scram();
+  }
+
+  const mainLed = document.getElementById('mainLed');
+  const mainStatus = document.getElementById('mainStatus');
+  const coolantLed = document.getElementById('coolantLed');
+  const coolantStatus = document.getElementById('coolantStatus');
+
+  if (state.scrammed) {
+    mainLed.className = 'led red';
+    mainStatus.textContent = 'REACTOR SHUTDOWN';
+  } else if (!mainLedOk || state.coreTemp > 340) {
+    mainLed.className = 'led yellow';
+    mainStatus.textContent = 'ABNORMAL CONDITION';
+  } else {
+    mainLed.className = 'led';
+    mainStatus.textContent = 'NORMAL OPERATION';
+  }
+
+  if (!coolantOk || state.flow < 50) {
+    coolantLed.className = 'led yellow';
+    coolantStatus.textContent = 'COOLANT FLOW: LOW';
+  } else {
+    coolantLed.className = 'led';
+    coolantStatus.textContent = 'COOLANT FLOW: OK';
+  }
+}
+
+function colorClass(val, warn, crit) {
+  if (val >= crit) return 'crit';
+  if (val >= warn) return 'warn';
+  return '';
+}
+
+function updateUI() {
+  const power = state.power;
+  const flux = (state.power / 100 * 3.2).toFixed(1);
+  const ctemp = Math.round(state.coreTemp);
+  const press = state.pressure.toFixed(1);
+  const sg = Math.round(state.sgLevel);
+  const turb = Math.round(state.turbine);
+  const rodPct = Math.round(state.rods);
+  const flowPct = Math.round(state.flow);
+  const elPower = Math.round(power * 11.97);
+  const cont = state.contPressure.toFixed(1);
+
+  const gPower = document.getElementById('g-power');
+  gPower.textContent = Math.round(power);
+  gPower.className = 'gauge-value ' + colorClass(power, 105, 115);
+
+  document.getElementById('g-flux').textContent = flux;
+  const gCtemp = document.getElementById('g-ctemp');
+  gCtemp.textContent = ctemp;
+  gCtemp.className = 'gauge-value ' + colorClass(ctemp, 340, 360);
+
+  const gPress = document.getElementById('g-pressure');
+  gPress.textContent = press;
+  gPress.className = 'gauge-value ' + (state.pressure > 170 ? 'crit' : state.pressure > 163 ? 'warn' : '');
+
+  setBar('rod-bar', 'rod-val', rodPct, '%');
+  setBar('flow-bar', 'flow-val', flowPct, '%', 50, 20);
+  setBar('sg-bar', 'sg-val', sg, '%', 20, 10);
+  setBar('turb-bar', 'turb-val', turb, '%');
+
+  const contPct = ((state.contPressure - 1) / 4) * 100;
+  setBar('cont-bar', 'cont-val', contPct, '', 50, 80);
+  document.getElementById('cont-val').textContent = cont;
+
+  document.getElementById('t-hot').textContent = Math.round(state.tHot) + '°C';
+  document.getElementById('t-cold').textContent = Math.round(state.tCold) + '°C';
+  document.getElementById('delta-t').textContent = Math.round(state.tHot - state.tCold) + '°C';
+  document.getElementById('primary-flow').textContent = (state.flow * 0.856).toFixed(1) + ' t/h';
+
+  document.getElementById('genOutput').textContent = elPower + ' MW';
+  document.getElementById('bot-power').style.width = Math.min(100, power) + '%';
+  document.getElementById('bot-power-val').textContent = Math.round(power) + '%';
+  document.getElementById('bot-temp').style.width = Math.min(100, (ctemp - 270) / 120 * 100) + '%';
+  document.getElementById('bot-temp-val').textContent = ctemp + '°C';
+  document.getElementById('bot-press').style.width = Math.min(100, press / 180 * 100) + '%';
+  document.getElementById('bot-press-val').textContent = press + ' bar';
+  document.getElementById('bot-flux').style.width = Math.min(100, state.power) + '%';
+  document.getElementById('bot-flux-val').textContent = flux + '×10¹³';
+  document.getElementById('bot-grid').style.width = Math.min(100, power) + '%';
+  document.getElementById('bot-grid-val').textContent = elPower + ' MW';
+
+  const keff = state.scrammed ? 0.990 : (0.990 + (state.rods / 100) * 0.015).toFixed(3);
+  document.getElementById('keff').textContent = state.scrammed ? '0.990' : keff;
+  document.getElementById('keff').style.color = state.scrammed ? 'var(--cyan)' : 'var(--green)';
+
+  const doubT = state.scrammed ? '∞' : (state.power > 100.5 ? '45s' : '∞');
+  document.getElementById('doublingTime').textContent = doubT;
+
+  const mode = state.scrammed ? 'HOT SHUTDOWN' : power < 5 ? 'SUBCRITICAL' : power < 50 ? 'LOW POWER' : 'POWER OPERATION';
+  document.getElementById('opMode').textContent = mode;
+  document.getElementById('opMode').style.color = state.scrammed ? 'var(--red)' : 'var(--green)';
+
+  updateGlows(power, ctemp, press);
+}
+
+function setBar(barId, valId, val, unit, warnAt=75, critAt=90) {
+  const bar = document.getElementById(barId);
+  const valEl = document.getElementById(valId);
+  if (!bar) return;
+  bar.style.width = Math.min(100, Math.max(0, val)) + '%';
+  if (val >= critAt) { bar.className = 'bar-fill crit'; }
+  else if (val >= warnAt) { bar.className = 'bar-fill warn'; }
+  else { bar.className = 'bar-fill'; }
+  if (valEl) valEl.textContent = Math.round(val) + unit;
+}
+
+function updateGlows(power, ctemp, press) {
+  const rpv = document.getElementById('rpv');
+  if (state.scrammed) {
+    rpv.className = 'reactor-component';
+  } else if (ctemp > 345) {
+    rpv.className = 'reactor-component crit-glow';
+  } else if (power > 103) {
+    rpv.className = 'reactor-component warn-glow';
+  } else {
+    rpv.className = 'reactor-component active-glow';
+  }
+
+  const coreGlow = document.getElementById('coreGlowEl');
+  if (coreGlow) {
+    const intensity = state.scrammed ? 0 : power / 100;
+    coreGlow.setAttribute('stop-opacity', intensity * 0.4);
+  }
+
+  const rods = ['rod1','rod2','rod3','rod4','rod5'];
+  const rodLen = (1 - state.rods/100) * 210;
+  rods.forEach(id => {
+    const r = document.getElementById(id);
+    if (r) r.setAttribute('height', Math.max(10, rodLen));
+  });
+
+  const sgWater = document.getElementById('sgWaterLevel');
+  if (sgWater) {
+    const h = (state.sgLevel / 100) * 104;
+    sgWater.setAttribute('y', 364 - h);
+    sgWater.setAttribute('height', h);
+  }
+}
+
+function setRods(val) {
+  state.rods = parseFloat(val);
+  document.getElementById('rod-slider-val').textContent = val + '%';
+  document.getElementById('rod-slider').value = val;
+  addLog('Control rods set to ' + val + '% withdrawn', 'info');
+}
+
+function setFlow(val) {
+  state.flow = parseFloat(val);
+  document.getElementById('flow-slider-val').textContent = val + '%';
+  if (val < 50) addLog('MCP speed low — coolant flow reduced', 'warn');
+}
+
+function setTurbine(val) {
+  state.turbine = parseFloat(val);
+  document.getElementById('turb-slider-val').textContent = val + '%';
+}
+
+function scram() {
+  if (state.scrammed) return;
+  state.scrammed = true;
+  state.rods = 0;
+  document.getElementById('rod-slider').value = 0;
+  document.getElementById('rod-slider-val').textContent = '0%';
+  document.getElementById('rod-slider-val').textContent = '0%';
+  document.getElementById('scramOverlay').style.display = 'block';
+  document.getElementById('scramBanner').style.display = 'block';
+  addLog('REACTOR SCRAM — ALL RODS INSERTED', 'crit');
+  addLog('Emergency core cooling system: ARMED', 'warn');
+  addLog('Decay heat removal: INITIATING', 'info');
+  safetySystemStatus[0].status = 'INJECTING';
+  safetySystemStatus[0].color = '#ffdd00';
+  buildSafetyList();
+  setTimeout(() => {
+    document.getElementById('scramBanner').style.display = 'none';
+  }, 5000);
+}
+
+function normalOp() {
+  state.scrammed = false;
+  state.scenario = null;
+  if (state.scenarioTimer) { clearInterval(state.scenarioTimer); state.scenarioTimer = null; }
+  state.rods = 80;
+  state.flow = 100;
+  state.turbine = 100;
+  state.pressure = 157;
+  state.sgLevel = 65;
+  state.contPressure = 1.0;
+  document.getElementById('rod-slider').value = 80;
+  document.getElementById('flow-slider').value = 100;
+  document.getElementById('turb-slider').value = 100;
+  document.getElementById('rod-slider-val').textContent = '80%';
+  document.getElementById('flow-slider-val').textContent = '100%';
+  document.getElementById('turb-slider-val').textContent = '100%';
+  document.getElementById('scramOverlay').style.display = 'none';
+  document.getElementById('scramBanner').style.display = 'none';
+  safetySystemStatus.forEach(s => {
+    if (s.name.includes('ECCS')) { s.status = 'ARMED'; s.color = '#00ff88'; }
+    if (s.name.includes('Diesel')) { s.status = 'STANDBY'; s.color = '#ffdd00'; }
+    if (s.name.includes('Relief')) { s.status = 'CLOSED'; s.color = '#00ff88'; }
+  });
+  buildSafetyList();
+  addLog('System reset to normal operation', 'ok');
+}
+
+function reset() { normalOp(); }
+
+const scenarios = {
+  loca: [
+    () => { addLog('SCENARIO: Loss of Coolant Accident (LOCA)', 'crit'); addLog('Primary loop pipe rupture detected — pressure dropping', 'crit'); },
+    () => { state.pressure -= 15; state.flow = 60; addLog('Coolant inventory decreasing — primary pressure 142 bar', 'warn'); },
+    () => { state.pressure -= 25; state.flow = 30; addLog('Low pressure signal — ECCS injection INITIATING', 'crit'); safetySystemStatus[0].status='INJECTING'; safetySystemStatus[0].color='#ffdd00'; buildSafetyList(); },
+    () => { scram(); state.pressure = 60; addLog('ECCS accumulators injecting borated water into core', 'warn'); addLog('Reactor SCRAM confirmed — k_eff < 0.99', 'ok'); },
+    () => { state.flow = 10; state.pressure = 40; addLog('Core uncovery partially prevented by ECCS injection', 'info'); addLog('Emergency diesel generators online — powering RHR system', 'ok'); },
+    () => { addLog('Residual heat removal (RHR) system cooling core — decay heat = 1.8%', 'info'); addLog('Containment intact — no radioactive release to environment', 'ok'); },
+  ],
+  lofw: [
+    () => { addLog('SCENARIO: Loss of Feedwater (LOFW)', 'crit'); addLog('All feedwater pumps tripped — steam generator level dropping', 'warn'); },
+    () => { state.sgLevel = Math.max(0, state.sgLevel - 10); addLog('SG level falling: ' + Math.round(state.sgLevel) + '%', 'warn'); },
+    () => { state.sgLevel = Math.max(0, state.sgLevel - 15); addLog('SG level CRITICAL: ' + Math.round(state.sgLevel) + '% — trip signal', 'crit'); },
+    () => { scram(); addLog('Reactor trip on low SG level', 'crit'); addLog('Auxiliary feedwater system actuated', 'ok'); },
+    () => { state.sgLevel += 5; addLog('Auxiliary feedwater restoring SG level — ' + Math.round(state.sgLevel) + '%', 'ok'); },
+    () => { addLog('SG inventory stable — decay heat removal in progress', 'info'); addLog('Root cause: feedwater pump seal failure — maintenance required', 'warn'); },
+  ],
+  lop: [
+    () => { addLog('SCENARIO: Station Blackout (Loss of All AC Power)', 'crit'); addLog('Grid connection lost — turbine and generator tripped', 'crit'); state.turbine = 0; },
+    () => { state.flow = 50; addLog('MCP coasting down — flywheel provides 30 seconds of flow', 'warn'); addLog('Emergency diesel generators starting...', 'info'); },
+    () => { scram(); state.flow = 20; addLog('Reactor SCRAM on turbine trip', 'warn'); addLog('Diesel generators failed to start — STATION BLACKOUT', 'crit'); },
+    () => { state.flow = 0; addLog('ALL AC POWER LOST — passive safety systems now only option', 'crit'); addLog('Natural circulation establishing in primary loop', 'info'); },
+    () => { state.flow = 8; addLog('Natural circulation flow: ~8% of normal — adequate for decay heat', 'ok'); addLog('Passive core flooding tanks pressurising — ready to inject', 'info'); },
+    () => { addLog('Battery-backed instruments operational — monitoring continuing', 'info'); addLog('Passive safety systems maintaining core cooling without AC power', 'ok'); addLog('External power restoration estimated: 4-8 hours', 'warn'); },
+  ],
+  chernobyl: [
+    () => { addLog('SCENARIO: Positive Void Coefficient (RBMK-type, not VVER)', 'crit'); addLog('[NOTE: VVER reactor has negative void coefficient — this scenario cannot occur in VVER]', 'warn'); addLog('Simulating RBMK positive feedback for educational purposes only', 'info'); },
+    () => { state.flow = 30; state.rods = 95; document.getElementById('rod-slider').value=95; addLog('Steam voids forming in coolant channels — reactivity INCREASING', 'crit'); },
+    () => { state.power = 115; addLog('Power excursion: coolant boiling creates more steam → MORE reactivity → runaway', 'crit'); addLog('Delayed neutron fraction insufficient to control rise rate', 'crit'); },
+    () => { state.power = 130; state.coreTemp = 380; addLog('POWER: 130% — CORE TEMP: 380°C — FUEL DAMAGE OCCURRING', 'crit'); addLog('Zircaloy cladding reacting with steam: Zr + 2H₂O → ZrO₂ + 2H₂', 'crit'); },
+    () => { state.power = 150; state.coreTemp = 450; state.contPressure = 2.5; addLog('HYDROGEN EXPLOSION — CORE DESTRUCTION', 'crit'); addLog('VVER safety: negative void coefficient prevents this — power decreases as voids form', 'ok'); },
+    () => { scram(); addLog('Educational note: Negative temperature & void coefficients are fundamental VVER safety features', 'info'); addLog('PWR/VVER physics: as coolant boils, neutron moderation decreases → chain reaction slows automatically', 'ok'); },
+  ],
+  fukushima: [
+    () => { addLog('SCENARIO: Station Blackout + Tsunami (Fukushima-type)', 'crit'); addLog('M9.0 earthquake — SCRAM initiated automatically on seismic signal', 'warn'); scram(); },
+    () => { addLog('Tsunami inundating diesel generator room (elevation +10m, wave +14m)', 'crit'); safetySystemStatus[5].status='FAILED'; safetySystemStatus[5].color='#ff2244'; safetySystemStatus[6].status='FAILED'; safetySystemStatus[6].color='#ff2244'; buildSafetyList(); },
+    () => { state.flow = 0; addLog('ALL AC POWER LOST — batteries provide 8 hours of instrumentation', 'crit'); addLog('DC-driven RCIC system injecting steam-driven coolant — operating', 'ok'); },
+    () => { addLog('Battery power exhausted — RCIC trips — core cooling lost', 'crit'); addLog('Core water level falling — fuel rods uncovering', 'crit'); },
+    () => { state.coreTemp = 400; addLog('Fuel cladding oxidation: hydrogen generation in core', 'crit'); addLog('Containment venting required to reduce pressure — radioactive release', 'crit'); state.contPressure = 3.5; },
+    () => { addLog('HYDROGEN EXPLOSION IN REACTOR BUILDING (not containment)', 'crit'); addLog('VVER-1200 improvements: passive hydrogen recombiners, 72h passive cooling — prevent this scenario', 'info'); addLog('AP1000 / VVER-1200 Generation III+ designs learned from Fukushima', 'ok'); },
+  ],
+  steamline: [
+    () => { addLog('SCENARIO: Main Steam Line Break (MSLB)', 'crit'); addLog('Steam line rupture outside containment — rapid pressure drop', 'warn'); },
+    () => { state.sgLevel = Math.max(0, state.sgLevel - 20); addLog('SG blowing down — level dropping rapidly', 'crit'); addLog('Core cooling by secondary side compromised', 'warn'); },
+    () => { addLog('Main Steam Isolation Valves (MSIV) closing — 3 seconds', 'info'); addLog('High steam line differential pressure signal: MSIV TRIP', 'ok'); scram(); },
+    () => { addLog('All MSIVs closed — steam line break isolated', 'ok'); addLog('Intact SGs available for residual heat removal via Auxiliary FW', 'info'); },
+    () => { addLog('Emergency feedwater to intact SGs — core cooling re-established', 'ok'); addLog('Worst-case MSLB results in overcooling transient — must be managed', 'warn'); },
+    () => { addLog('Boric acid injection prevents return to criticality during cooldown', 'ok'); addLog('Plant in cold shutdown condition — MSLB successfully mitigated', 'ok'); },
+  ],
+  rod_ejection: [
+    () => { addLog('SCENARIO: Rod Ejection Accident', 'crit'); addLog('Control rod drive mechanism housing failure — rapid rod ejection', 'crit'); },
+    () => { state.rods = 95; document.getElementById('rod-slider').value=95; addLog('Positive reactivity insertion — power spike initiating', 'crit'); state.power = 130; },
+    () => { state.coreTemp = 380; addLog('Prompt power excursion — Doppler broadening providing negative feedback', 'warn'); addLog('As fuel heats, ²³⁸U resonance absorption increases — natural power limit', 'info'); },
+    () => { state.power = 80; addLog('Doppler effect reduced power spike from 200% to 80% within 0.1 seconds', 'ok'); addLog('Fuel pin local temperature exceedance possible — primary circuit activity monitor', 'warn'); },
+    () => { scram(); addLog('Reactor SCRAM on high neutron flux', 'crit'); addLog('Primary coolant activity monitoring for fuel damage signature', 'info'); },
+    () => { addLog('Power spike mitigated by Doppler broadening — core intact', 'ok'); addLog('Some fuel damage possible at ejection location — boron injection for subcriticality', 'info'); addLog('Key lesson: Prompt negative reactivity feedbacks are essential safety features', 'ok'); },
+  ],
+};
+
+function runScenario(name) {
+  normalOp();
+  state.scenario = name;
+  state.scenarioStep = 0;
+  if (state.scenarioTimer) clearInterval(state.scenarioTimer);
+  const steps = scenarios[name];
+  if (!steps) return;
+  steps[0]();
+  state.scenarioStep = 1;
+  state.scenarioTimer = setInterval(() => {
+    if (state.scenarioStep >= steps.length) {
+      clearInterval(state.scenarioTimer);
+      state.scenarioTimer = null;
+      return;
+    }
+    steps[state.scenarioStep]();
+    state.scenarioStep++;
+  }, 3000);
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.mode-tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  event.target.classList.add('active');
+}
+
+const tooltip = document.getElementById('tooltip');
+let tooltipTarget = null;
+
+document.addEventListener('mousemove', e => {
+  if (tooltipTarget) {
+    let x = e.clientX + 16;
+    let y = e.clientY - 8;
+    if (x + 320 > window.innerWidth) x = e.clientX - 330;
+    if (y + 200 > window.innerHeight) y = e.clientY - 180;
+    tooltip.style.left = x + 'px';
+    tooltip.style.top = y + 'px';
+  }
+});
+
+document.querySelectorAll('.reactor-component').forEach(el => {
+  el.addEventListener('mouseenter', e => {
+    const title = el.dataset.title;
+    const info = el.dataset.info;
+    const status = el.dataset.status;
+    if (!title) return;
+    tooltipTarget = el;
+    tooltip.style.display = 'block';
+    tooltip.innerHTML = `<div class="tooltip-title">${title}</div><div class="tooltip-body">${info}</div>${status ? `<div class="tooltip-status">STATUS: ${status}</div>` : ''}`;
+  });
+  el.addEventListener('mouseleave', () => {
+    tooltipTarget = null;
+    tooltip.style.display = 'none';
+  });
+});
+
+addLog('System initialised — VVER-1200 simulator online', 'ok');
+addLog('All parameters nominal — full power operation', 'ok');
+addLog('Hover over reactor components for technical details', 'info');
+buildSafetyList();
+updateClock();
+setInterval(updateClock, 1000);
+setInterval(updateState, 500);
+</script>
+</body>
+</html>
